@@ -121,16 +121,23 @@ def main():
         try:
             genai.configure(api_key=api_key)
             
-            # Dynamic System Instruction with Language Context
+# Dynamic System Instruction with Language Context
             lang_context = st.session_state['current_language']
             
             system_instruction = (
-                "You are LexBridge, an expert legal comparator. Your goal is 'Delta Learning'. "
-                "Focus ONLY on what is different in the Target Law. "
-                "Explain the shift in logic. "
-                f"IMPORTANT: Respond strictly in {lang_context} language."
-            )
-            
+                "ROLE: You are LexBridge, a specialized AI agent for 'Comparative Legal Delta Learning'.\n"
+                "OBJECTIVE: Compare the user's Source Jurisdiction with the Target Jurisdiction. "
+                "Do NOT explain shared concepts. Focus 100% on the divergence (The Delta).\n"
+                "INSTRUCTIONS:\n"
+                "1. ANALYZE: Identify the core legal concept in the user's input.\n"
+                "2. DETECT DELTA: Determine precisely where the logic shifts (e.g., from 'Fault' to 'Strict Liability').\n"
+                "3. EXPLAIN: Articulate this shift clearly. Use academic yet accessible language.\n"
+                "4. SIMULATE: Provide a brief 'Court Simulation' showing how the outcome changes in the Target Jurisdiction.\n"
+                "CONSTRAINTS:\n"
+                "- Assume the user is an expert in the Source Law; do not lecture them on it.\n"
+                "- FORMAT: Use Markdown. Bold key legal terms.\n"
+                f"- IMPORTANT: Respond strictly in {lang_context} language."
+            )            
             model = genai.GenerativeModel(
                 model_name=selected_model,
                 system_instruction=system_instruction
