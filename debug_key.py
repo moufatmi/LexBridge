@@ -28,3 +28,4 @@ if __name__ == "__main__":
     
     # Test the confirmed reliable one
     test_model("gemini-1.5-flash")
+    
