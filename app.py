@@ -1,6 +1,13 @@
 import streamlit as st
 import google.generativeai as genai
 import json
+import os
+
+# Try importing OpenAI, handle if missing
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
 
 # --- Page Configuration (Must be first) ---
 st.set_page_config(
@@ -74,10 +81,31 @@ def main():
             "title": "LexBridge",
             "subtitle": "Bridging legal systems through **Delta Learning**. We focus on what changes.",
             "settings": "Settings",
-            "api_key_label": "Gemini API Key",
+            "provider_label": "AI Provider",
+            "api_key_label": "API Key",
+            "test_key_label": "🔑 **Test Key (Gemini Only):**",
+            "tip_paste": "💡 Tip: Paste your key to start.",
             "model_label": "Reasoning Model",
+            "debug_label": "🔍 Verify Model Availability",
+            "lang_settings": "🌍 Language Settings",
             "interface_lang_label": "Interface Language",
             "translate_btn": "🌐 Translate Interface",
+            "quick_start_header": "⚡ Quick Start Scenarios",
+            "btn_fr_uk": "🇫🇷 France vs 🇬🇧 UK: Good Faith",
+            "q1_source": "France (Civil Law)",
+            "q1_target": "United Kingdom (Common Law)",
+            "q1_concept": "Is there a duty of 'Good Faith' during commercial contract negotiations? Can I pull out of a deal at the last minute without penalty?",
+            
+            "btn_us_eu": "🇺🇸 US vs 🇪🇺 EU: Data Privacy",
+            "q2_source": "United States (California)",
+            "q2_target": "European Union (GDPR)",
+            "q2_concept": "A company collects email addresses for marketing without explicit opt-in consent. Is this legal?",
+            
+            "btn_de_ny": "🇩🇪 Germany vs 🇺🇸 NY: Force Majeure",
+            "q3_source": "Germany (BGB)",
+            "q3_target": "New York (Common Law)",
+            "q3_concept": "A supplier cannot deliver goods due to an unforeseen global pandemic. The contract has no Force Majeure clause. Are they liable?",
+            
             "source_label": "Source Jurisdiction",
             "target_label": "Target Jurisdiction",
             "concept_label": "Legal Scenario / Clause",
@@ -93,55 +121,105 @@ def main():
     if 'input_source' not in st.session_state: st.session_state['input_source'] = ""
     if 'input_target' not in st.session_state: st.session_state['input_target'] = ""
     if 'input_concept' not in st.session_state: st.session_state['input_concept'] = ""
+    if 'current_language' not in st.session_state: st.session_state['current_language'] = "English"
 
     ui = st.session_state['ui_labels']
+    
+    # --- RTL / LTR Logic ---
+    # Detect if the current active language is RTL
+    rtl_languages = ['arabic', 'ar', 'hebrew', 'he', 'urdu', 'ur', 'persian', 'fa', 'arabe']
+    is_rtl = any(lang in st.session_state['current_language'].lower() for lang in rtl_languages)
+
+    if is_rtl:
+        st.markdown("""
+            <style>
+            /* Global RTL Settings */
+            .stApp {
+                direction: rtl;
+                text-align: right;
+            }
+            
+            /* Text Alignment for all standard elements */
+            .stMarkdown, .stTextInput, .stTextArea, .stSelectbox, .stButton, p, h1, h2, h3, h4, h5, h6, span, div {
+                text-align: right;
+            }
+            
+            /* Ensure inputs are RTL */
+            .stTextInput > div > div > input, .stTextArea > div > div > textarea {
+                direction: rtl;
+                text-align: right;
+            }
+
+            /* Fix Sidebar alignment */
+            section[data-testid="stSidebar"] {
+                direction: rtl;
+            }
+
+            /* Fix bullet points */
+            ul, ol, li {
+                direction: rtl;
+                text-align: right;
+                margin-right: 1.5em;
+                margin-left: 0;
+            }
+            
+            /* Horizontal Blocks (Columns): Ensure they flow Right-to-Left */
+            div[data-testid="stHorizontalBlock"] {
+                direction: rtl;
+            }
+            </style>
+        """, unsafe_allow_html=True)
 
     # --- Sidebar ---
     with st.sidebar:
         st.header(f"⚙️ {ui['settings']}")
         
-        # API Key 
-        api_key = st.text_input(ui["api_key_label"], type="password", help="Get your key at aistudio.google.com")
+        # Provider Selection
+        provider = st.selectbox(ui.get("provider_label", "AI Provider"), ["Google Gemini", "OpenAI", "Groq"])
         
-        # Public Test Key (Convenience)
-        st.caption("🔑 **Test Key:**")
-        st.code("AIzaSyAaMQcLQS009cpvXkM1fX3hyf-zsk4jTCM", language="text")
+        # API Key 
+        key_label = f"{provider} {ui['api_key_label']}"
+        api_key = st.text_input(key_label, type="password")
+        
+     
 
         if not api_key:
-            st.info("💡 Tip: Paste the key above to start.")
+            st.info(ui["tip_paste"])
 
         st.markdown("---")
         
-        # Model Selection (HACKATHON EXCLUSIVE LIST)
-        model_options = [
-            "gemini-2.5-flash",           # ✅ VERIFIED WORKING
-            "gemini-3-pro-preview",       
-            "gemini-3-flash-preview",     
-            "gemini-2.5-pro",             
-            "gemini-2.0-flash",           
-            "deep-research-pro-preview-12-2025", 
-            "gemini-1.5-pro",             
-            "Other (Custom)"
-        ]
+        # Model Selection logic
+        if provider == "Google Gemini":
+            model_options = [
+                "gemini-2.5-flash", 
+                "gemini-1.5-pro", 
+                "gemini-1.5-flash", 
+                "gemini-2.0-flash-exp"
+            ]
+        elif provider == "OpenAI":
+            model_options = ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"]
+        elif provider == "Groq":
+            model_options = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "mixtral-8x7b-32768"]
+        
+        # Add "Other" option to all providers
+        model_options.append("Other (Custom)")
+        
         selected_option = st.selectbox(ui["model_label"], model_options, index=0)
         
         if selected_option == "Other (Custom)":
-            selected_model = st.text_input("Enter Model Name ID", placeholder="e.g., gemini-2.0-flash-exp")
+            selected_model = st.text_input("Enter Model Name ID", placeholder="e.g., gpt-4-32k")
             if not selected_model:
-                st.warning("Using default: gemini-1.5-flash")
-                selected_model = "gemini-1.5-flash"
+                st.info("⚠️ Please enter a specific model ID.")
         else:
             selected_model = selected_option
         
-        # Debugger
-        if st.checkbox("🔍 Debug: List Available Models"):
+        # Debugger (Gemini only for now)
+        if provider == "Google Gemini" and st.checkbox(ui["debug_label"]):
             if api_key:
                 try:
                     genai.configure(api_key=api_key)
-                    st.write("Fetching models...")
                     models = list(genai.list_models())
                     my_models = [m.name.replace("models/", "") for m in models if 'generateContent' in m.supported_generation_methods]
-                    st.success(f"Found {len(my_models)} models")
                     st.json(my_models)
                 except Exception as e:
                     st.error(f"Error: {e}")
@@ -149,14 +227,12 @@ def main():
         st.markdown("---")
         
         # Translation
-        with st.expander("🌍 Language Settings"):
-            target_lang = st.text_input(ui["interface_lang_label"], placeholder="e.g., Spanish, Japanese")
+        with st.expander(ui["lang_settings"]):
+            target_lang = st.text_input(ui["interface_lang_label"], placeholder="e.g., Arabic, Spanish")
             if st.button(ui["translate_btn"]):
-                handle_translation(api_key, selected_model, target_lang)
+                handle_translation(api_key, provider, selected_model, target_lang)
 
     # --- Main Interface ---
-    
-    # Header Section
     col_head_1, col_head_2 = st.columns([3, 1])
     with col_head_1:
         st.title(ui["title"])
@@ -165,30 +241,29 @@ def main():
     st.markdown("---")
 
     # --- Quick Start / Demos ---
-    st.markdown("### ⚡ Quick Start Scenarios")
+    st.markdown(f"### {ui['quick_start_header']}")
     q1, q2, q3 = st.columns(3)
     
-    if q1.button("🇫🇷 France vs 🇬🇧 UK: Good Faith"):
-        st.session_state['input_source'] = "France (Civil Law)"
-        st.session_state['input_target'] = "United Kingdom (Common Law)"
-        st.session_state['input_concept'] = "Is there a duty of 'Good Faith' during commercial contract negotiations? Can I pull out of a deal at the last minute without penalty?"
+    if q1.button(ui["btn_fr_uk"]):
+        st.session_state['input_source'] = ui["q1_source"]
+        st.session_state['input_target'] = ui["q1_target"]
+        st.session_state['input_concept'] = ui["q1_concept"]
         st.rerun()
 
-    if q2.button("🇺🇸 US vs 🇪🇺 EU: Data Privacy"):
-        st.session_state['input_source'] = "United States (California)"
-        st.session_state['input_target'] = "European Union (GDPR)"
-        st.session_state['input_concept'] = "A company collects email addresses for marketing without explicit opt-in consent. Is this legal?"
+    if q2.button(ui["btn_us_eu"]):
+        st.session_state['input_source'] = ui["q2_source"]
+        st.session_state['input_target'] = ui["q2_target"]
+        st.session_state['input_concept'] = ui["q2_concept"]
         st.rerun()
 
-    if q3.button("🇩🇪 Germany vs 🇺🇸 NY: Force Majeure"):
-        st.session_state['input_source'] = "Germany (BGB)"
-        st.session_state['input_target'] = "New York (Common Law)"
-        st.session_state['input_concept'] = "A supplier cannot deliver goods due to an unforeseen global pandemic. The contract has no Force Majeure clause. Are they liable?"
+    if q3.button(ui["btn_de_ny"]):
+        st.session_state['input_source'] = ui["q3_source"]
+        st.session_state['input_target'] = ui["q3_target"]
+        st.session_state['input_concept'] = ui["q3_concept"]
         st.rerun()
 
-    st.markdown("<br>", unsafe_allow_html=True) # Spacer
+    st.markdown("<br>", unsafe_allow_html=True) 
 
-    # --- Inputs ---
     col1, col2 = st.columns(2)
     with col1:
         source_jurisdiction = st.text_input(ui["source_label"], value=st.session_state['input_source'], placeholder=ui["source_ph"])
@@ -197,112 +272,130 @@ def main():
 
     concept = st.text_area(ui["concept_label"], value=st.session_state['input_concept'], height=150, placeholder=ui["concept_ph"])
 
-    # --- Analysis Action ---
     if st.button(ui["analyze_btn"], type="primary", use_container_width=True):
         if not api_key:
-            st.error("🔒 Please enter your Gemini API Key in the sidebar to proceed.")
+            st.error(f"🔒 Please enter your {provider} API Key.")
             return
         if not concept.strip():
             st.warning("⚠️ Please describe a legal scenario first.")
             return
 
-        run_analysis(api_key, selected_model, source_jurisdiction, target_jurisdiction, concept, ui)
+        run_analysis(api_key, provider, selected_model, source_jurisdiction, target_jurisdiction, concept, ui)
 
-def handle_translation(api_key, model_name, target_lang):
-    """Translates the UI labels using Gemini."""
-    if not api_key or not target_lang:
-        st.error("Missing API Key or Target Language.")
-        return
+def get_system_prompt(source, target):
+    return f"""
+    ROLE: You are LexBridge, an Elite Comparative Law Architect specializing in the 'Functional Method' of legal comparison.
+    CONTEXT: The user is a legal professional transitioning from {{source_jurisdiction}} to {{target_jurisdiction}}.
+    OBJECTIVE: Perform a rigorous 'Delta Analysis'. Do NOT define concepts. Focus purely on the structural, procedural, and logical divergences.
+
+    INSTRUCTIONS:
+    1. **Strict Delta Focus:** If concepts are 90% similar, ignore them. Focus on the 10% that changes the legal outcome.
+    2. **Source Authority:** You MUST cite specific Statutes/Codes for Civil Law (e.g., "DOC Art. 77", "French Civil Code") and Leading Cases/Precedents for Common Law (e.g., "Donoghue v Stevenson", "Rylands v Fletcher").
+    3. **Terminology:** Use precise legal terminology in the target language.
+    4. **Reasoning:** Contrast the *method* of reasoning.
+
+    RESPONSE STRUCTURE (Translate headers to interface language):
+    
+    ## ⚡ [The Legal Delta (Executive Summary)]
+    (A high-level synthesis of the divergence.)
+
+    ## 🏛️ [Structural & Logical Shift]
+    (Explain the deep jurisprudential shift.)
+
+    ## ⚖️ [Courtroom Simulation: The Scenario]
+    * **[The Facts]:** ...
+    * **[Ruling in Source]:** ...
+    * **[Ruling in Target]:** ...
+
+    ## 🧭 [Strategic Adaptation]
+    (Actionable advice.)
+    
+    IMPORTANT: Respond *strictly* in the detected interface language.
+    """
+
+def run_analysis(api_key, provider, model_name, source, target, concept, ui):
+    sys_prompt = get_system_prompt(source, target)
+    user_prompt = f"Compare:\nSource: {source}\nTarget: {target}\nScenario: {concept}"
 
     try:
-        genai.configure(api_key=api_key)
-        trans_model = genai.GenerativeModel(model_name)
-        
-        ui_current = st.session_state['ui_labels']
-        prompt = f"""
-        Translate the values of this JSON to {target_lang}.
-        Keep keys identical. Return ONLY raw JSON.
-        JSON: {json.dumps(ui_current)}
-        """
-        
-        with st.spinner(f"Translating interface to {target_lang}..."):
-            response = trans_model.generate_content(prompt)
-            clean_json = response.text.replace("```json", "").replace("```", "").strip()
-            st.session_state['ui_labels'] = json.loads(clean_json)
-            st.rerun()
-            
-    except Exception as e:
-        check_error(e)
-
-def run_analysis(api_key, model_name, source, target, concept, ui):
-    """Core analysis logic."""
-    try:
-        genai.configure(api_key=api_key)
-        
-        # System instruction: Persona & structured output
-        # --- The Ultimate System Instruction ---
-        sys_prompt = """
-        ROLE: You are LexBridge, an Elite Comparative Law Architect specializing in the 'Functional Method' of legal comparison.
-        CONTEXT: The user is a legal professional transitioning from {source_jurisdiction} to {target_jurisdiction}.
-        OBJECTIVE: Perform a rigorous 'Delta Analysis'. Do NOT define concepts. Focus purely on the structural, procedural, and logical divergences.
-
-        INSTRUCTIONS:
-        1. **Strict Delta Focus:** If concepts are 90% similar, ignore them. Focus on the 10% that changes the legal outcome.
-        2. **Source Authority:** You MUST cite specific Statutes/Codes for Civil Law (e.g., "DOC Art. 77", "French Civil Code") and Leading Cases/Precedents for Common Law (e.g., "Donoghue v Stevenson", "Rylands v Fletcher").
-        3. **Terminology:** Use precise legal terminology (e.g., 'Bonne foi' vs 'Implied Covenant', 'Faute' vs 'Breach of Duty').
-        4. **Reasoning:** Contrast the *method* of reasoning (e.g., Deductive from Code vs. Inductive from Precedent).
-
-        RESPONSE STRUCTURE (Use these exact Markdown headers):
-
-        ## ⚡ The Legal Delta (Executive Summary)
-        (A high-level synthesis of the divergence. Use **bolding** for specific legal terms of art.)
-
-        ## 🏛️ Structural & Logical Shift
-        (Explain the deep jurisprudential shift. Why does the Target system think differently? Contrast the "Burden of Proof" or "Source of Obligation".)
-
-        ## ⚖️ Courtroom Simulation: The "[Concept]" Scenario
-        * **The Facts:** (A brief, ambiguous fact pattern relevant to the concept)
-        * **Ruling in {source_jurisdiction}:** (The Outcome + Statutory Basis. Explain *Why*.)
-        * **Ruling in {target_jurisdiction}:** (The Contrasting Outcome + Case Law Basis. Explain the shift in liability.)
-
-        ## 🧭 Strategic Adaptation
-        (Actionable advice for the lawyer: "Stop looking for [Source Concept], instead build your case around [Target Concept].")
-
-        IMPORTANT: Respond strictly in {st.session_state.get('current_language', 'English')}.
-        """
-        
-        model = genai.GenerativeModel(model_name, system_instruction=sys_prompt)
-        
-        user_prompt = f"""
-        Compare these two jurisdictions:
-        Source: {source}
-        Target: {target}
-        Scenario: {concept}
-        """
-        
         with st.spinner(ui["spinner"]):
-            response = model.generate_content(user_prompt)
-            st.markdown("---")
-            st.subheader(ui["analysis_header"])
-            with st.container():
-                st.markdown(response.text)
+            response_text = ""
+            
+            if provider == "Google Gemini":
+                genai.configure(api_key=api_key)
+                model = genai.GenerativeModel(model_name, system_instruction=sys_prompt)
+                response = model.generate_content(user_prompt)
+                response_text = response.text
+
+            elif provider in ["OpenAI", "Groq"]:
+                if OpenAI is None:
+                    st.error("❌ 'openai' library not installed. Please run `pip install openai`.")
+                    return
+                
+                base_url = None
+                if provider == "Groq":
+                    base_url = "https://api.groq.com/openai/v1"
+                
+                client = OpenAI(api_key=api_key, base_url=base_url)
+                
+                stream = client.chat.completions.create(
+                    model=model_name,
+                    messages=[
+                        {"role": "system", "content": sys_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    stream=True
+                )
+                response_text = st.write_stream(stream)
+            
+            # For Gemini, we already have text, display it
+            if provider == "Google Gemini":
+                st.markdown("---")
+                st.subheader(ui["analysis_header"])
+                st.markdown(response_text)
+            
             st.success("Analysis Complete.")
 
     except Exception as e:
-        check_error(e)
+        st.error(f"Error: {e}")
 
-def check_error(e):
-    error_msg = str(e)
-    if "429" in error_msg:
-            st.warning("🚦 **Traffic Jam!** You've hit the Gemini Free Tier rate limit.")
-            st.markdown("Optimization tips:\n"
-                        "- ⏳ Wait **15-20 seconds** and try again.\n"
-                        "- 🔄 Switch to **Gemini 1.5 Flash** or **Pro** in the sidebar.")
-    elif "404" in error_msg:
-        st.error(f"❌ Model Not Found: The selected model is not available for your key/region.\nTry selecting 'gemini-1.5-flash' or use the Debug tool.")
-        st.code(error_msg)
-    else:
-            st.error(f"Analysis Error: {error_msg}")
+def handle_translation(api_key, provider, model_name, target_lang):
+    if not api_key: return
+    
+    # Translation Prompt
+    ui_current = st.session_state['ui_labels']
+    prompt_text = f"Translate values of JSON to {target_lang}. Keep keys identical. Return ONLY raw JSON.\nJSON: {json.dumps(ui_current)}"
+
+    try:
+        with st.spinner(f"Translating to {target_lang}..."):
+            clean_json = "{}"
+            
+            if provider == "Google Gemini":
+                genai.configure(api_key=api_key)
+                model = genai.GenerativeModel(model_name) 
+                resp = model.generate_content(prompt_text)
+                clean_json = resp.text
+                
+            elif provider in ["OpenAI", "Groq"]:
+                if OpenAI is None:
+                     st.error("Missing openai lib"); return
+                
+                base_url = "https://api.groq.com/openai/v1" if provider == "Groq" else None
+                client = OpenAI(api_key=api_key, base_url=base_url)
+                
+                resp = client.chat.completions.create(
+                    model=model_name,
+                    messages=[{"role": "user", "content": prompt_text}]
+                )
+                clean_json = resp.choices[0].message.content
+
+            clean_json = clean_json.replace("```json", "").replace("```", "").strip()
+            st.session_state['ui_labels'] = json.loads(clean_json)
+            st.session_state['current_language'] = target_lang
+            st.rerun()
+
+    except Exception as e:
+        st.error(f"Translation Error: {e}")
 
 if __name__ == "__main__":
     main()
