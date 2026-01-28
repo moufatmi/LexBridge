@@ -228,9 +228,13 @@ def main():
         
         # Translation
         with st.expander(ui["lang_settings"]):
+            # Use current language as default value if distinct
             target_lang = st.text_input(ui["interface_lang_label"], placeholder="e.g., Arabic, Spanish")
             if st.button(ui["translate_btn"]):
                 handle_translation(api_key, provider, selected_model, target_lang)
+
+        st.markdown("---")
+        st.markdown("<div style='text-align: center; color: grey;'>Made by <b>Moussab Fatmi</b> 🇲🇦</div>", unsafe_allow_html=True)
 
     # --- Main Interface ---
     col_head_1, col_head_2 = st.columns([3, 1])
