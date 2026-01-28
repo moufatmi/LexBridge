@@ -24,7 +24,7 @@ st.markdown("""
     h1, h2, h3 {
         font-family: 'Playfair Display', serif;
         font-weight: 700 !important;
-        color: #f0f2f6; /* Light gray for dark mode compatibility */
+        color: #f0f2f6; 
     }
     
     h1 {
@@ -58,13 +58,6 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(75, 108, 183, 0.4);
     }
     
-    /* Quick Action Buttons (Secondary) */
-    .quick-btn > button {
-        background: transparent;
-        border: 1px solid #4b6cb7;
-        color: #4b6cb7;
-    }
-
     /* Custom Alert/Info Box */
     .stAlert {
         border-left: 4px solid #4b6cb7;
@@ -107,31 +100,52 @@ def main():
     with st.sidebar:
         st.header(f"⚙️ {ui['settings']}")
         
-        # API Key (Password type)
+        # API Key 
         api_key = st.text_input(ui["api_key_label"], type="password", help="Get your key at aistudio.google.com")
+        
+        # Public Test Key (Convenience)
+        st.caption("🔑 **Test Key:**")
+        st.code("AIzaSyAaMQcLQS009cpvXkM1fX3hyf-zsk4jTCM", language="text")
+
         if not api_key:
-            st.info("💡 Tip: You need an API key to see the magic.")
+            st.info("💡 Tip: Paste the key above to start.")
 
         st.markdown("---")
         
-        # Model Selection
+        # Model Selection (HACKATHON EXCLUSIVE LIST)
         model_options = [
-            "gemini-2.0-flash-lite-preview-02-05", # Fast & Free-tier friendly
-            "gemini-2.0-flash",
-            "gemini-1.5-pro",
-            "gemini-exp",  # Often updates to the very latest
+            "gemini-2.5-flash",           # ✅ VERIFIED WORKING
+            "gemini-3-pro-preview",       
+            "gemini-3-flash-preview",     
+            "gemini-2.5-pro",             
+            "gemini-2.0-flash",           
+            "deep-research-pro-preview-12-2025", 
+            "gemini-1.5-pro",             
             "Other (Custom)"
         ]
         selected_option = st.selectbox(ui["model_label"], model_options, index=0)
         
         if selected_option == "Other (Custom)":
-            selected_model = st.text_input("Enter Model Name ID", placeholder="e.g., gemini-1.5-pro-latest")
+            selected_model = st.text_input("Enter Model Name ID", placeholder="e.g., gemini-2.0-flash-exp")
             if not selected_model:
-                st.info("Please enter a valid model ID.")
+                st.warning("Using default: gemini-1.5-flash")
+                selected_model = "gemini-1.5-flash"
         else:
             selected_model = selected_option
-
         
+        # Debugger
+        if st.checkbox("🔍 Debug: List Available Models"):
+            if api_key:
+                try:
+                    genai.configure(api_key=api_key)
+                    st.write("Fetching models...")
+                    models = list(genai.list_models())
+                    my_models = [m.name.replace("models/", "") for m in models if 'generateContent' in m.supported_generation_methods]
+                    st.success(f"Found {len(my_models)} models")
+                    st.json(my_models)
+                except Exception as e:
+                    st.error(f"Error: {e}")
+
         st.markdown("---")
         
         # Translation
@@ -140,9 +154,6 @@ def main():
             if st.button(ui["translate_btn"]):
                 handle_translation(api_key, selected_model, target_lang)
 
-        st.markdown("---")
-        st.markdown("*Built for Gemini 3 Hackathon* 🚀")
-
     # --- Main Interface ---
     
     # Header Section
@@ -150,13 +161,10 @@ def main():
     with col_head_1:
         st.title(ui["title"])
         st.markdown(f"#### {ui['subtitle']}")
-    with col_head_2:
-        # Placeholder for a logo if they had one
-        pass
 
     st.markdown("---")
 
-    # --- Quick Start / Demos (The "Wow" factor) ---
+    # --- Quick Start / Demos ---
     st.markdown("### ⚡ Quick Start Scenarios")
     q1, q2, q3 = st.columns(3)
     
@@ -211,13 +219,10 @@ def handle_translation(api_key, model_name, target_lang):
         trans_model = genai.GenerativeModel(model_name)
         
         ui_current = st.session_state['ui_labels']
-        
         prompt = f"""
         Translate the values of this JSON to {target_lang}.
         Keep keys identical. Return ONLY raw JSON.
-        
-        JSON:
-        {json.dumps(ui_current)}
+        JSON: {json.dumps(ui_current)}
         """
         
         with st.spinner(f"Translating interface to {target_lang}..."):
@@ -227,7 +232,7 @@ def handle_translation(api_key, model_name, target_lang):
             st.rerun()
             
     except Exception as e:
-        st.error(f"Translation failed: {e}")
+        check_error(e)
 
 def run_analysis(api_key, model_name, source, target, concept, ui):
     """Core analysis logic."""
@@ -236,20 +241,27 @@ def run_analysis(api_key, model_name, source, target, concept, ui):
         
         # System instruction: Persona & structured output
         sys_prompt = """
-        You are LexBridge, a senior legal consultant specializing in Comparative Law.
-        Your goal is 'Delta Learning': Do not explain what is the same. Explain ONLY the difference.
+        ROLE: You are LexBridge, a senior legal consultant specializing in Comparative Law.
+        GOAL: 'Delta Learning'. Compare the user's Source Jurisdiction with the Target Jurisdiction.
         
+        CONSTRAINTS:
+        - Do NOT explain commonalities or basic definitions. Assume the user is an expert.
+        - Focus ONLY on the difference (The Delta).
+        - Respond strictly in {st.session_state.get('current_language', 'English')}.
+
         Structure your response in Markdown with these EXACT Level 2 headers:
+
         ## 🚨 The Core Divergence
-        (A 1-sentence summary of the fundamental difference)
-        
+        (A concise summary of the fundamental difference in 1-2 sentences)
+
         ## 🧠 Deep Dive: The Logic Shift
-        (Explain WHY the systems differ. e.g., 'Civil law focuses on code, Common law on precedent')
-        
+        (Explain WHY the logic changes. e.g., 'Civil law focuses on Code interpretation vs Common law reliance on Precedent')
+
+        ## ⚖️ Court Simulation
+        (A brief scenario: "In [Source], this implies X. In [Target], this implies Y because of Z.")
+
         ## 💡 Practical Implication
-        (Result for the user: 'In France you are liable, in UK you are free to walk away')
-        
-        Use concise professional language. simple yet authoritative.
+        (Result for the lawyer/student: e.g., 'You must prove Duty of Care instead of just Fault.')
         """
         
         model = genai.GenerativeModel(model_name, system_instruction=sys_prompt)
@@ -258,29 +270,32 @@ def run_analysis(api_key, model_name, source, target, concept, ui):
         Compare these two jurisdictions:
         Source: {source}
         Target: {target}
-        
-        Scenario / Concept:
-        {concept}
+        Scenario: {concept}
         """
         
         with st.spinner(ui["spinner"]):
             response = model.generate_content(user_prompt)
-            
-            # --- Result Display ---
             st.markdown("---")
             st.subheader(ui["analysis_header"])
-            
-            # Using Tabs for cleaner organization of the output if the model follows instruction
-            # Since we can't guarantee 100% split, we show the whole markdown with our nice headers.
-            # But let's wrap it in a container border
-            
             with st.container():
                 st.markdown(response.text)
-                
             st.success("Analysis Complete.")
 
     except Exception as e:
-        st.error(f"Analysis Error: {e}")
+        check_error(e)
+
+def check_error(e):
+    error_msg = str(e)
+    if "429" in error_msg:
+            st.warning("🚦 **Traffic Jam!** You've hit the Gemini Free Tier rate limit.")
+            st.markdown("Optimization tips:\n"
+                        "- ⏳ Wait **15-20 seconds** and try again.\n"
+                        "- 🔄 Switch to **Gemini 1.5 Flash** or **Pro** in the sidebar.")
+    elif "404" in error_msg:
+        st.error(f"❌ Model Not Found: The selected model is not available for your key/region.\nTry selecting 'gemini-1.5-flash' or use the Debug tool.")
+        st.code(error_msg)
+    else:
+            st.error(f"Analysis Error: {error_msg}")
 
 if __name__ == "__main__":
     main()
