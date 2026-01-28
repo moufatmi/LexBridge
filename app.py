@@ -80,7 +80,7 @@ def main():
         st.session_state['ui_labels'] = {
             "title": "LexBridge",
             "subtitle": "Bridging legal systems through **Delta Learning**. We focus on what changes.",
-            "settings": "Configuration",
+            "settings": "Settings",
             "api_key_label": "Gemini API Key",
             "model_label": "Reasoning Model",
             "interface_lang_label": "Interface Language",
@@ -105,7 +105,7 @@ def main():
 
     # --- Sidebar ---
     with st.sidebar:
-        st.title(f"⚙️ {ui['settings']}")
+        st.header(f"⚙️ {ui['settings']}")
         
         # API Key (Password type)
         api_key = st.text_input(ui["api_key_label"], type="password", help="Get your key at aistudio.google.com")
@@ -116,12 +116,21 @@ def main():
         
         # Model Selection
         model_options = [
-            "gemini-2.0-flash-lite-preview-02-05",
-            "gemini-1.5-pro",
+            "gemini-2.0-flash-lite-preview-02-05", # Fast & Free-tier friendly
             "gemini-2.0-flash",
-            "gemini-1.5-flash"
+            "gemini-1.5-pro",
+            "gemini-exp",  # Often updates to the very latest
+            "Other (Custom)"
         ]
-        selected_model = st.selectbox(ui["model_label"], model_options, index=0)
+        selected_option = st.selectbox(ui["model_label"], model_options, index=0)
+        
+        if selected_option == "Other (Custom)":
+            selected_model = st.text_input("Enter Model Name ID", placeholder="e.g., gemini-1.5-pro-latest")
+            if not selected_model:
+                st.info("Please enter a valid model ID.")
+        else:
+            selected_model = selected_option
+
         
         st.markdown("---")
         
